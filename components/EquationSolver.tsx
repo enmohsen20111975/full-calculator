@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { create, all, MathType } from 'mathjs';
+// Fix: Import `Fraction` type from mathjs to be used for type casting.
+import { create, all, MathType, Fraction } from 'mathjs';
 import Button from './ui/Button';
 
 // Configure mathjs to use Fractions for higher precision
@@ -93,8 +94,8 @@ const EquationSolver: React.FC = () => {
             let solutions: MathType[];
             try {
                 // Fix: Convert coefficients array to a math.js Matrix and cast constants array to satisfy lusolve's type requirements.
-                // FIX: Cast `coefficients` to `math.Fraction[][]` to resolve type error with `math.matrix` which expects a more specific type than `MathType[][]`.
-                const solutionMatrix = math.lusolve(math.matrix(coefficients as math.Fraction[][]), constants as math.Fraction[]);
+                // FIX: Cast `coefficients` to `Fraction[][]` to resolve type error with `math.matrix` which expects a more specific type than `MathType[][]`.
+                const solutionMatrix = math.lusolve(math.matrix(coefficients as Fraction[][]), constants as Fraction[]);
                 solutions = (solutionMatrix as any).toArray().flat();
             } catch (e) {
                 throw new Error("The system may be singular (no unique solution) or inconsistent.");
@@ -123,6 +124,10 @@ const EquationSolver: React.FC = () => {
         }
 
       const parts = singleEquation.split('=');
+      if (parts.length < 2 || !parts[0].trim() || !parts[1].trim()) {
+        setError('Invalid equation format. Ensure there are expressions on both sides of the "=".');
+        return;
+      }
       const expression = `(${parts[0].trim()}) - (${parts[1].trim()})`;
       
       const node = math.parse(expression);
@@ -162,7 +167,8 @@ const EquationSolver: React.FC = () => {
       // 2. Try quadratic solve (ax^2 + bx + c = 0)
       if(!solved) {
           try {
-              const rationalizedQuadratic = math.rationalize(simplified, {[variable]: true}, true) as { coefficients: MathType[] };
+              // Fix: Pass the variable as a string directly to math.rationalize, which avoids the computed property name error.
+              const rationalizedQuadratic = math.rationalize(simplified, variable, true) as { coefficients: MathType[] };
                 if (rationalizedQuadratic.coefficients) {
                   const c = rationalizedQuadratic.coefficients[0] || math.fraction(0);
                   const b = rationalizedQuadratic.coefficients[1] || math.fraction(0);

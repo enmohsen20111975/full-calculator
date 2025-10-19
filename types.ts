@@ -1,4 +1,5 @@
 import { EquationCategoryData } from "./data/equations/index";
+import { ReactionCategoryData } from './data/chemistry/reactions';
 
 export interface Constant {
   name: string;
@@ -29,8 +30,15 @@ export interface Category {
   id: string;
   name: string;
   constants: Constant[];
-  equations: EquationCategoryData;
+  equations: EquationCategoryData | {}; // Allow empty object for tabs without equations
   geometry?: Shape[];
+  reactions?: ReactionCategoryData;
+}
+
+export interface MainCategory {
+  id: string;
+  name: string;
+  subCategories: Category[];
 }
 
 // Fix: Add missing type definitions for unit conversion data.
@@ -43,4 +51,23 @@ export interface ConversionRule {
 
 export interface UnitConversionData {
   [category: string]: ConversionRule[];
+}
+
+export interface ChemicalReaction {
+  category: string;
+  reaction_name: string;
+  reactants: string[];
+  products: string[];
+  balanced_equation: string;
+  description: string;
+  enthalpy_change?: number; // in kJ/mol
+}
+
+export interface PlotParameter {
+  id: string;
+  name: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
 }

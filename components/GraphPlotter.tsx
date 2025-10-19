@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as math from 'mathjs';
+import type { PlotParameter } from '../types';
 import Input from './ui/Input';
 import Button from './ui/Button';
+import Card from './ui/Card';
 
 // Plotly is loaded from CDN, declare its type for TypeScript
 declare const Plotly: any;
@@ -17,19 +19,24 @@ const GraphPlotter: React.FC = () => {
   const [range, setRange] = useState({ xMin: -5, xMax: 5, yMin: -5, yMax: 5 });
 
   // State for 2D Explicit: y = f(x)
-  const [functions, setFunctions] = useState<string[]>(['sin(x)']);
+  const [functions, setFunctions] = useState<string[]>(['sin(a * x)']);
 
   // State for 2D Parametric: x=f(t), y=g(t)
-  const [parametricX, setParametricX] = useState('3 * cos(t)');
-  const [parametricY, setParametricY] = useState('3 * sin(t)');
-  const [parameter, setParameter] = useState('t');
+  const [parametricX, setParametricX] = useState('a * cos(t)');
+  const [parametricY, setParametricY] = useState('a * sin(t)');
+  const [parameterT, setParameterT] = useState('t');
   const [tRange, setTRange] = useState({ min: 0, max: 6.2832 }); // 0 to 2*PI
 
   // State for 2D Implicit: f(x,y)=k
-  const [implicitEquation, setImplicitEquation] = useState('x^2 + y^2 = 9');
+  const [implicitEquation, setImplicitEquation] = useState('x^2 + y^2 = a^2');
 
   // State for 3D Explicit: z = f(x,y)
-  const [function3D, setFunction3D] = useState<string>('sin(sqrt(x^2 + y^2))');
+  const [function3D, setFunction3D] = useState<string>('a * sin(sqrt(x^2 + y^2))');
+  
+  // State for interactive parameters
+  const [parameters, setParameters] = useState<PlotParameter[]>([
+      { id: '1', name: 'a', value: 1, min: -5, max: 5, step: 0.1 }
+  ]);
 
   // Handlers for 2D explicit functions list
   const addFunction = () => setFunctions([...functions, '']);
@@ -43,8 +50,52 @@ const GraphPlotter: React.FC = () => {
     setFunctions(newFunctions);
   };
   
+  // Handlers for parameters
+  const addParameter = () => {
+    setParameters(prev => {
+        const existingNames = new Set(prev.map(p => p.name));
+        let newName = 'a';
+        let charCode = 'a'.charCodeAt(0);
+        while (existingNames.has(newName)) {
+            charCode++;
+            newName = String.fromCharCode(charCode);
+        }
+        return [...prev, { id: Date.now().toString(), name: newName, value: 1, min: -5, max: 5, step: 0.1 }];
+    });
+  };
+  
+  const updateParameter = (id: string, field: keyof PlotParameter, value: string | number) => {
+      setParameters(prev => prev.map(p => {
+          if (p.id === id) {
+              if (field === 'name') {
+                  if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value as string) || value === '') {
+                      return { ...p, [field]: value };
+                  }
+                  return p; // Invalid name
+              }
+              const numValue = typeof value === 'string' ? parseFloat(value) : value;
+              return { ...p, [field]: isNaN(numValue) ? p[field] : numValue };
+          }
+          return p;
+      }));
+  };
+
+  const removeParameter = (id: string) => {
+      setParameters(prev => prev.filter(p => p.id !== id));
+  };
+
+
   const plotGraph = () => {
     if (!plotRef.current) return;
+    
+    // Create scope from parameters for mathjs evaluation
+    const parameterScope = parameters.reduce((scope, p) => {
+        if (p.name.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {
+            scope[p.name] = p.value;
+        }
+        return scope;
+    }, {} as { [key: string]: number });
+
 
     // Common layout settings
     const commonLayout = {
@@ -75,7 +126,7 @@ const GraphPlotter: React.FC = () => {
 
                     for (let x = range.xMin; x <= range.xMax; x += step) {
                         xValues.push(x);
-                        yValues.push(code.evaluate({ x: x }));
+                        yValues.push(code.evaluate({ x: x, ...parameterScope }));
                     }
                     
                     return { x: xValues, y: yValues, mode: 'lines', name: `y = ${funcStr}` };
@@ -96,7 +147,7 @@ const GraphPlotter: React.FC = () => {
 
                 for (let i = 0; i <= stepsParam; i++) {
                     const t = tRange.min + i * tStep;
-                    const scope = { [parameter.trim() || 't']: t };
+                    const scope = { [parameterT.trim() || 't']: t, ...parameterScope };
                     xParamValues.push(codeX.evaluate(scope));
                     yParamValues.push(codeY.evaluate(scope));
                 }
@@ -106,11 +157,22 @@ const GraphPlotter: React.FC = () => {
             
             case '2d_implicit':
                 let expression;
-                if (implicitEquation.includes('=')) {
-                    const parts = implicitEquation.split('=');
+                const trimmedEquation = implicitEquation.trim();
+                
+                if (!trimmedEquation) {
+                    Plotly.purge(plotRef.current);
+                    return;
+                }
+
+                if (trimmedEquation.includes('=')) {
+                    const parts = trimmedEquation.split('=');
+                    if (parts.length < 2 || !parts[0].trim() || !parts[1].trim()) {
+                        Plotly.purge(plotRef.current);
+                        return;
+                    }
                     expression = `(${parts[0].trim()}) - (${parts[1].trim()})`;
                 } else {
-                    expression = implicitEquation;
+                    expression = trimmedEquation;
                 }
                 const nodeImplicit = math.parse(expression);
                 const codeImplicit = nodeImplicit.compile();
@@ -131,7 +193,7 @@ const GraphPlotter: React.FC = () => {
                     for (let i = 0; i <= stepsGrid; i++) {
                         const x = range.xMin + i * xStep;
                         try {
-                            zRow.push(codeImplicit.evaluate({ x, y }));
+                            zRow.push(codeImplicit.evaluate({ x, y, ...parameterScope }));
                         } catch {
                             zRow.push(NaN);
                         }
@@ -175,7 +237,7 @@ const GraphPlotter: React.FC = () => {
                     const zRow: number[] = [];
                     for (let i = 0; i <= steps3D; i++) {
                         const x = range.xMin + i * xStep3D;
-                        zRow.push(code3D.evaluate({ x, y }));
+                        zRow.push(code3D.evaluate({ x, y, ...parameterScope }));
                     }
                     zValues3D.push(zRow);
                 }
@@ -231,8 +293,8 @@ const GraphPlotter: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
       plotType, functions, function3D, range, 
-      parametricX, parametricY, parameter, tRange, 
-      implicitEquation
+      parametricX, parametricY, parameterT, tRange, 
+      implicitEquation, parameters
   ]);
 
   const renderInputs = () => {
@@ -245,7 +307,7 @@ const GraphPlotter: React.FC = () => {
                         {functions.map((func, index) => (
                             <div key={index} className="flex items-center space-x-2 mb-2">
                                 <span className="text-cyan-400 font-mono">y =</span>
-                                <Input type="text" value={func} onChange={(e) => updateFunction(index, e.target.value)} placeholder="e.g., x^2" />
+                                <Input type="text" value={func} onChange={(e) => updateFunction(index, e.target.value)} placeholder="e.g., a * x^2" />
                                 <button onClick={() => removeFunction(index)} className="text-red-400 hover:text-red-300 text-xl font-bold">&times;</button>
                             </div>
                         ))}
@@ -268,25 +330,25 @@ const GraphPlotter: React.FC = () => {
                 <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-1">x({parameter}) =</label>
+                            <label className="block text-sm font-medium text-slate-300 mb-1">x({parameterT}) =</label>
                             <Input value={parametricX} onChange={(e) => setParametricX(e.target.value)} />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-1">y({parameter}) =</label>
+                            <label className="block text-sm font-medium text-slate-300 mb-1">y({parameterT}) =</label>
                             <Input value={parametricY} onChange={(e) => setParametricY(e.target.value)} />
                         </div>
                     </div>
                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-slate-300 mb-1">Parameter</label>
-                            <Input value={parameter} onChange={(e) => setParameter(e.target.value)} />
+                            <Input value={parameterT} onChange={(e) => setParameterT(e.target.value)} />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-1">{parameter} Min</label>
+                            <label className="block text-sm font-medium text-slate-300 mb-1">{parameterT} Min</label>
                             <Input type="number" value={tRange.min} onChange={(e) => setTRange(r => ({...r, min: parseFloat(e.target.value)}))} />
                         </div>
                          <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-1">{parameter} Max</label>
+                            <label className="block text-sm font-medium text-slate-300 mb-1">{parameterT} Max</label>
                             <Input type="number" value={tRange.max} onChange={(e) => setTRange(r => ({...r, max: parseFloat(e.target.value)}))} />
                         </div>
                     </div>
@@ -301,7 +363,7 @@ const GraphPlotter: React.FC = () => {
                             type="text"
                             value={implicitEquation}
                             onChange={(e) => setImplicitEquation(e.target.value)}
-                            placeholder="e.g., x^2 + y^2 = 4"
+                            placeholder="e.g., x^2 + y^2 = a^2"
                          />
                      </div>
                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
@@ -335,7 +397,7 @@ const GraphPlotter: React.FC = () => {
                                 type="text"
                                 value={function3D}
                                 onChange={(e) => setFunction3D(e.target.value)}
-                                placeholder="e.g., sin(x) * cos(y)"
+                                placeholder="e.g., a * sin(x) * cos(y)"
                             />
                         </div>
                     </div>
@@ -354,7 +416,6 @@ const GraphPlotter: React.FC = () => {
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-slate-300 mb-1">Y Max</label>
-                          {/* Fix: Changed e.content to e.target.value to correctly access the input value from the change event. */}
                           <Input type="number" value={range.yMax} onChange={(e) => setRange(r => ({ ...r, yMax: parseFloat(e.target.value) }))} />
                         </div>
                     </div>
@@ -375,6 +436,36 @@ const GraphPlotter: React.FC = () => {
         <div className="mt-4">
             {renderInputs()}
         </div>
+        
+        <Card title="Interactive Parameters">
+            <div className="space-y-4">
+                {parameters.map(p => (
+                    <div key={p.id} className="grid grid-cols-1 sm:grid-cols-6 gap-2 items-center">
+                        <Input value={p.name} onChange={e => updateParameter(p.id, 'name', e.target.value)} placeholder="name" className="sm:col-span-1" />
+                        <div className="sm:col-span-3 flex items-center space-x-2">
+                           <Input type="number" value={p.min} onChange={e => updateParameter(p.id, 'min', e.target.value)} className="w-1/3" />
+                           <input 
+                                type="range" 
+                                min={p.min} 
+                                max={p.max} 
+                                value={p.value} 
+                                step={p.step}
+                                onChange={e => updateParameter(p.id, 'value', e.target.value)}
+                                className="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                           />
+                           <Input type="number" value={p.max} onChange={e => updateParameter(p.id, 'max', e.target.value)} className="w-1/3" />
+                        </div>
+                        <div className="sm:col-span-1 flex items-center space-x-1">
+                             <Input type="number" value={p.value} onChange={e => updateParameter(p.id, 'value', e.target.value)} />
+                        </div>
+                        <Button variant="secondary" onClick={() => removeParameter(p.id)} className="text-red-400 hover:text-red-300">
+                            &times;
+                        </Button>
+                    </div>
+                ))}
+                 <Button variant="secondary" onClick={addParameter} className="w-full text-xs py-1">+ Add Parameter</Button>
+            </div>
+        </Card>
 
         <div ref={plotRef} style={{ width: '100%', minHeight: '400px' }}></div>
     </div>
