@@ -11,9 +11,13 @@ import Card from './ui/Card';
 import DifferentiationSolver from './DifferentiationSolver';
 import IntegrationSolver from './IntegrationSolver';
 import GeometrySolver from './GeometrySolver';
+import VectorSolver from './VectorSolver';
 
 interface CategoryViewProps {
   category: Category;
+  calcExpression: string;
+  setCalcExpression: (value: string | ((prev: string) => string)) => void;
+  onConstantClick: (symbol: string) => void;
 }
 
 const containerVariants = {
@@ -31,73 +35,93 @@ const itemVariants = {
   visible: { y: 0, opacity: 1 },
 };
 
-// Component for Math tab
-const MathView: React.FC<{ category: Category }> = ({ category }) => (
-  <div className="space-y-6">
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <motion.div variants={itemVariants} className="space-y-6">
-        <Card title="Scientific Calculator">
-          <Calculator />
-        </Card>
-        <Card title="Equation & System Solver">
-          <EquationSolver />
+// Component for Calculator tab
+const CalculatorView: React.FC<{
+  category: Category;
+  expression: string;
+  setExpression: (value: string | ((prev: string) => string)) => void;
+  onConstantClick: (symbol: string) => void;
+}> = ({ category, expression, setExpression, onConstantClick }) => {
+  return (
+     <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="grid grid-cols-1 lg:grid-cols-3 gap-6"
+    >
+      <motion.div variants={itemVariants} className="lg:col-span-2">
+        <Card title="Full Function Scientific Calculator">
+          <Calculator expression={expression} setExpression={setExpression} />
         </Card>
       </motion.div>
       <motion.div variants={itemVariants}>
-        <Card title="Graph Plotter">
-          <GraphPlotter />
-        </Card>
+        {category.constants.length > 0 && (
+          <Card title="Mathematical Constants">
+            <ConstantsTable constants={category.constants} onConstantClick={onConstantClick} />
+          </Card>
+        )}
       </motion.div>
-    </div>
-    <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <Card title="Derivative Calculator">
-        <DifferentiationSolver />
-      </Card>
-      <Card title="Numerical Integration (Definite)">
-        <IntegrationSolver />
-      </Card>
     </motion.div>
-    {category.constants.length > 0 && (
-      <motion.div variants={itemVariants}>
-        <Card title={`${category.name} Constants`}>
-          <ConstantsTable constants={category.constants} />
+  );
+};
+
+
+// Component for Math tab
+const MathView: React.FC<{ category: Category }> = ({ category }) => {
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <motion.div variants={itemVariants} className="space-y-6">
+          <Card title="Equation & System Solver">
+            <EquationSolver />
+          </Card>
+        </motion.div>
+        <motion.div variants={itemVariants}>
+          <Card title="Graph Plotter">
+            <GraphPlotter />
+          </Card>
+        </motion.div>
+      </div>
+      <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card title="Derivative Calculator">
+          <DifferentiationSolver />
+        </Card>
+        <Card title="Numerical Integration (Definite)">
+          <IntegrationSolver />
         </Card>
       </motion.div>
-    )}
-    {Object.keys(category.equations).length > 0 && (
-      <motion.div variants={itemVariants}>
-        <Card title={`${category.name} Equations`}>
-          <EquationsList equationsData={category.equations} />
-        </Card>
-      </motion.div>
-    )}
-  </div>
-);
+      {Object.keys(category.equations).length > 0 && (
+        <motion.div variants={itemVariants}>
+          <Card title={`${category.name} Equations`}>
+            <EquationsList equationsData={category.equations} />
+          </Card>
+        </motion.div>
+      )}
+    </div>
+  );
+};
 
 // Generic component for science and engineering tabs
-const ScienceView: React.FC<{ category: Category }> = ({ category }) => (
-  <div className="space-y-6">
-    <motion.div variants={itemVariants}>
-      <Card title="Scientific Calculator">
-        <Calculator />
-      </Card>
-    </motion.div>
-    {category.constants.length > 0 && (
-      <motion.div variants={itemVariants}>
-        <Card title={`${category.name} Constants`}>
-          <ConstantsTable constants={category.constants} />
-        </Card>
-      </motion.div>
-    )}
-    {Object.keys(category.equations).length > 0 && (
-      <motion.div variants={itemVariants}>
-        <Card title={`${category.name} Equations`}>
-          <EquationsList equationsData={category.equations} />
-        </Card>
-      </motion.div>
-    )}
-  </div>
-);
+const ScienceView: React.FC<{ category: Category, onConstantClick: (symbol: string) => void }> = ({ category, onConstantClick }) => {
+  return (
+    <div className="space-y-6">
+      {category.constants.length > 0 && (
+        <motion.div variants={itemVariants}>
+          <Card title={`${category.name} Constants`}>
+            <ConstantsTable constants={category.constants} onConstantClick={onConstantClick} />
+          </Card>
+        </motion.div>
+      )}
+      {Object.keys(category.equations).length > 0 && (
+        <motion.div variants={itemVariants}>
+          <Card title={`${category.name} Equations`}>
+            <EquationsList equationsData={category.equations} />
+          </Card>
+        </motion.div>
+      )}
+    </div>
+  );
+};
 
 // Component for Unit Converter tab
 const UnitConverterView: React.FC = () => (
@@ -113,14 +137,27 @@ const GeometryView: React.FC<{ category: Category }> = ({ category }) => (
     </motion.div>
 );
 
+// Component for Vector Math tab
+const VectorView: React.FC = () => (
+  <motion.div variants={itemVariants}>
+    <Card title="3D Vector Operations">
+        <VectorSolver />
+    </Card>
+  </motion.div>
+);
 
-const CategoryView: React.FC<CategoryViewProps> = ({ category }) => {
+
+const CategoryView: React.FC<CategoryViewProps> = ({ category, calcExpression, setCalcExpression, onConstantClick }) => {
     const renderContent = () => {
     switch (category.id) {
+      case 'calculator':
+        return <CalculatorView category={category} expression={calcExpression} setExpression={setCalcExpression} onConstantClick={onConstantClick} />;
       case 'math':
         return <MathView category={category} />;
       case 'geometry':
         return <GeometryView category={category} />;
+      case 'vector':
+        return <VectorView />;
       case 'converter':
         return <UnitConverterView />;
       case 'physics':
@@ -129,9 +166,9 @@ const CategoryView: React.FC<CategoryViewProps> = ({ category }) => {
       case 'mechanical':
       case 'civil':
       case 'stats':
-        return <ScienceView category={category} />;
+        return <ScienceView category={category} onConstantClick={onConstantClick} />;
       default:
-        return <ScienceView category={category} />;
+        return <p>Select a category</p>;
     }
   };
   

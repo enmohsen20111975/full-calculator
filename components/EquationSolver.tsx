@@ -21,6 +21,12 @@ const EquationSolver: React.FC = () => {
     }
   };
 
+  const showExample = () => {
+    setEquation("2x + y - z = 8\nx - y + 2z = -3\nx + 2y + z = 4");
+    setSolution('');
+    setError('');
+  };
+
   const solveEquation = () => {
     setError('');
     setSolution('');
@@ -227,7 +233,10 @@ const EquationSolver: React.FC = () => {
           className="w-full bg-slate-700 text-white placeholder-slate-400 border border-slate-600 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition font-mono"
         />
       </div>
-      <Button onClick={solveEquation} className="w-full">Solve</Button>
+      <div className="flex gap-2">
+        <Button onClick={solveEquation} className="w-full">Solve</Button>
+        <Button onClick={showExample} variant="secondary" className="w-full">Show Example</Button>
+      </div>
       {solution && (
         <div className="bg-green-900/50 border border-green-700 text-green-300 p-3 rounded-md text-center">
           <p className="font-semibold">Solution:</p>

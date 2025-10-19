@@ -1,32 +1,58 @@
 import React, { useState, useEffect } from 'react';
-import * as math from 'mathjs';
+import { create, all } from 'mathjs';
 import Button from './ui/Button';
+
+// Initialize mathjs instance
+const math = create(all);
 
 interface HistoryItem {
   expression: string;
   result: string;
 }
 
-const Calculator: React.FC = () => {
-  const [expression, setExpression] = useState('');
+interface CalculatorProps {
+    expression: string;
+    setExpression: (value: string | ((prev: string) => string)) => void;
+}
+
+const Calculator: React.FC<CalculatorProps> = ({ expression, setExpression }) => {
   const [result, setResult] = useState('');
   const [ans, setAns] = useState('');
   const [memory, setMemory] = useState<number>(0);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  
+  const [isShifted, setIsShifted] = useState(false);
+  const [angleMode, setAngleMode] = useState<'rad' | 'deg'>('rad');
 
   const handleInput = (value: string) => {
     setExpression((prev) => prev + value);
+    if (isShifted) setIsShifted(false);
   };
 
   const calculate = () => {
     try {
       if (!expression) return;
-      const evalResult = math.evaluate(expression);
+      let scope = {};
+      
+      if (angleMode === 'deg') {
+        const degToRad = (deg: number) => deg * (Math.PI / 180);
+        const radToDeg = (rad: number) => rad * (180 / Math.PI);
+
+        scope = {
+            sin: (x: number) => Math.sin(degToRad(x)),
+            cos: (x: number) => Math.cos(degToRad(x)),
+            tan: (x: number) => Math.tan(degToRad(x)),
+            asin: (x: number) => radToDeg(Math.asin(x)),
+            acos: (x: number) => radToDeg(Math.acos(x)),
+            atan: (x: number) => radToDeg(Math.atan(x)),
+        };
+      }
+      
+      const evalResult = math.evaluate(expression, scope);
       const formattedResult = math.format(evalResult, { notation: 'auto', precision: 14 });
       setResult(formattedResult);
       setAns(formattedResult);
-      // Add to history, keeping the list to a reasonable size (e.g., 20)
       setHistory(prev => [{ expression, result: formattedResult }, ...prev].slice(0, 20));
     } catch (error) {
       setResult('Error');
@@ -41,7 +67,7 @@ const Calculator: React.FC = () => {
   const backspace = () => {
     setExpression((prev) => prev.slice(0, -1));
   };
-
+  
   const memoryClear = () => setMemory(0);
   const memoryRecall = () => setExpression((prev) => prev + memory.toString());
   const memoryAdd = () => {
@@ -73,7 +99,7 @@ const Calculator: React.FC = () => {
   
   useEffect(() => {
     const handleKeyPress = (event: KeyboardEvent) => {
-      if ((event.key >= '0' && event.key <= '9') || ['+','-','*','/','^','.','(',')', 'e', 'E'].includes(event.key)) {
+      if ((event.key >= '0' && event.key <= '9') || ['+','-','*','/','^','.','(',')', 'e', 'E', 'p', 'i'].includes(event.key)) {
         handleInput(event.key);
       } else if (event.key === 'Enter' || event.key === '=') {
         event.preventDefault();
@@ -86,34 +112,83 @@ const Calculator: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calculate]);
 
-
   const buttons = [
-    '(', ')', '^', 'e',
-    'sin(', 'cos(', 'tan(', 'log(',
-    'MC', 'MR', 'M+', 'M-',
-    '7', '8', '9', '/',
-    '4', '5', '6', '*',
-    '1', '2', '3', '-',
-    '0', '.', 'ANS', '+',
+    // display, value, type
+    { display: 'Shift', value: 'shift', type: 'action' },
+    { display: angleMode.toUpperCase(), value: 'angle', type: 'action' },
+    { display: '(', value: '(', type: 'op' },
+    { display: ')', value: ')', type: 'op' },
+    { display: '⌫', value: 'backspace', type: 'action' },
+    
+    { display: isShifted ? 'x³' : 'x²', value: isShifted ? '^3' : '^2', type: 'func' },
+    { display: isShifted ? '³√' : '√', value: isShifted ? 'cbrt(' : 'sqrt(', type: 'func' },
+    { display: isShifted ? 'ʸ√x' : 'xʸ', value: isShifted ? 'nthRoot(' : '^', type: 'op' },
+    { display: 'x!', value: '!', type: 'func' },
+    { display: 'C', value: 'clear', type: 'action' },
+
+    { display: isShifted ? 'asin' : 'sin', value: isShifted ? 'asin(' : 'sin(', type: 'func' },
+    { display: isShifted ? 'acos' : 'cos', value: isShifted ? 'acos(' : 'cos(', type: 'func' },
+    { display: isShifted ? 'atan' : 'tan', value: isShifted ? 'atan(' : 'tan(', type: 'func' },
+    { display: isShifted ? '10ˣ' : 'log', value: isShifted ? '10^' : 'log10(', type: 'func' },
+    { display: isShifted ? 'eˣ' : 'ln', value: isShifted ? 'exp(' : 'log(', type: 'func' },
+    
+    { display: '7', value: '7', type: 'num' },
+    { display: '8', value: '8', type: 'num' },
+    { display: '9', value: '9', type: 'num' },
+    { display: '÷', value: '/', type: 'op' },
+    { display: 'MC', value: 'mc', type: 'mem' },
+
+    { display: '4', value: '4', type: 'num' },
+    { display: '5', value: '5', type: 'num' },
+    { display: '6', value: '6', type: 'num' },
+    { display: '×', value: '*', type: 'op' },
+    { display: 'MR', value: 'mr', type: 'mem' },
+
+    { display: '1', value: '1', type: 'num' },
+    { display: '2', value: '2', type: 'num' },
+    { display: '3', value: '3', type: 'num' },
+    { display: '-', value: '-', type: 'op' },
+    { display: 'M+', value: 'm+', type: 'mem' },
+    
+    { display: '0', value: '0', type: 'num' },
+    { display: '.', value: '.', type: 'num' },
+    { display: 'ANS', value: 'ans', type: 'action' },
+    { display: '+', value: '+', type: 'op' },
+    { display: 'M-', value: 'm-', type: 'mem' },
+    
+    { display: 'π', value: 'pi', type: 'num' },
+    { display: 'e', value: 'e', type: 'num' },
+    { display: 'History', value: 'history', type: 'action', className: 'col-span-1 sm:col-span-2' },
+    { display: '=', value: 'calc', type: 'action', className: 'col-span-2 sm:col-span-1' },
   ];
 
-  const handleButtonClick = (btn: string) => {
-    switch(btn) {
-        case 'MC': memoryClear(); break;
-        case 'MR': memoryRecall(); break;
-        case 'M+': memoryAdd(); break;
-        case 'M-': memorySubtract(); break;
-        case 'ANS': handleInput(ans); break;
-        default: handleInput(btn);
+  const handleButtonClick = (btn: typeof buttons[0]) => {
+    switch(btn.value) {
+        case 'shift': setIsShifted(s => !s); break;
+        case 'angle': setAngleMode(m => m === 'rad' ? 'deg' : 'rad'); break;
+        case 'clear': clear(); break;
+        case 'backspace': backspace(); break;
+        case 'mc': memoryClear(); break;
+        case 'mr': memoryRecall(); break;
+        case 'm+': memoryAdd(); break;
+        case 'm-': memorySubtract(); break;
+        case 'ans': handleInput(ans); break;
+        case 'history': setShowHistory(s => !s); break;
+        case 'calc': calculate(); break;
+        default: handleInput(btn.value);
     }
   }
 
-  const getButtonVariant = (btn: string): 'primary' | 'secondary' | 'operator' | 'function' => {
-      if (['/', '*', '-', '+', '^', '(', ')'].includes(btn)) return 'operator';
-      if (isNaN(parseInt(btn)) && btn !== '.') return 'function';
-      return 'secondary';
+  const getButtonVariant = (btn: typeof buttons[0]): 'primary' | 'secondary' | 'operator' | 'function' => {
+    if (btn.value === 'calc') return 'primary';
+    if (btn.type === 'op') return 'operator';
+    if (btn.type === 'num' || btn.type === 'mem') return 'secondary';
+    // for func and action
+    if (btn.value === 'shift' && isShifted) return 'primary';
+    return 'function';
   }
 
   return (
@@ -148,23 +223,17 @@ const Calculator: React.FC = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-4 gap-2">
-        <Button variant="secondary" onClick={clear}>C</Button>
-        <Button variant="secondary" onClick={backspace}>⌫</Button>
-        <Button variant="secondary" className="col-span-2" onClick={() => setShowHistory(s => !s)}>
-            History 🕒
-        </Button>
-      </div>
-      <div className="grid grid-cols-4 gap-2">
-        {buttons.map((btn) => (
+      <div className="grid grid-cols-5 gap-2">
+        {buttons.map((btn, index) => (
           <Button 
-            key={btn} 
+            key={index} 
             variant={getButtonVariant(btn)}
-            onClick={() => handleButtonClick(btn)}>
-            {btn}
+            onClick={() => handleButtonClick(btn)}
+            className={`${btn.className || ''}`}
+          >
+            {btn.display}
           </Button>
         ))}
-        <Button variant="primary" className="col-span-4 text-2xl" onClick={calculate}>=</Button>
       </div>
     </div>
   );
