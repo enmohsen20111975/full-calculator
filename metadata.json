@@ -1,0 +1,5 @@
+{
+  "name": "Engineering & Science Calculator",
+  "description": "A universal multifunction calculator and solver for science and engineering fields. It allows users to perform calculations, solve equations, view constants and formulas, and generate graphs, all organized in category tabs.",
+  "requestFramePermissions": []
+}
